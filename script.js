@@ -3,10 +3,11 @@ const ctx = canvas.getContext('2d');
 const letters = [];
 
 // Physics parameters
-const gravity = 0.8;          // Vertical acceleration
-const restitution = 0.7;      // Bounce energy retention
-const airResistance = 0.99;   // Air friction
-const wallBounce = 0.8;       // Side wall bounce factor
+const gravity = 0.8;
+const restitution = 0.7;
+const airResistance = 0.99;
+const wallBounce = 0.8;
+const chineseChars = ['李', '婷']; // Li Ting characters
 
 function resize() {
     canvas.width = window.innerWidth;
@@ -15,45 +16,55 @@ function resize() {
 
 class Letter {
     constructor() {
-        this.char = String.fromCharCode(65 + Math.random() * 26);
-        this.size = Math.random() * 30 + 20;
-        this.x = Math.random() * (canvas.width - this.size) + this.size/2;
-        this.y = -this.size;
-        this.vx = (Math.random() - 0.5) * 4;  // Initial horizontal velocity
+        // 20% chance for Chinese characters, 80% for English
+        if (Math.random() < 0.2) {
+            this.char = chineseChars[Math.floor(Math.random() * chineseChars.length)];
+        } else {
+            this.char = String.fromCharCode(65 + Math.random() * 26);
+        }
+        
+        // Size properties
+        this.startSize = 10; // Initial small size
+        this.size = this.startSize;
+        this.maxSize = Math.random() * 30 + 20; // Random maximum size
+        this.growthRate = 0.5; // Size increase per frame
+
+        this.x = Math.random() * (canvas.width - this.maxSize) + this.maxSize/2;
+        this.y = -this.maxSize;
+        this.vx = (Math.random() - 0.5) * 4;
         this.vy = 0;
         this.color = `hsl(${Math.random() * 360}, 70%, 70%)`;
     }
 
     update() {
+        // Grow until reaching max size
+        if (this.size < this.maxSize) {
+            this.size = Math.min(this.size + this.growthRate, this.maxSize);
+        }
+
         // Apply physics
         this.vy += gravity;
         this.vx *= airResistance;
         this.vy *= airResistance;
 
-        // Update position
         this.x += this.vx;
         this.y += this.vy;
 
-        // Wall collisions
         const halfSize = this.size/2;
         
-        // Left wall
         if (this.x < halfSize) {
             this.x = halfSize;
             this.vx *= -wallBounce;
         }
-        
-        // Right wall
         if (this.x > canvas.width - halfSize) {
             this.x = canvas.width - halfSize;
             this.vx *= -wallBounce;
         }
 
-        // Floor collision
         if (this.y > canvas.height - halfSize) {
             this.y = canvas.height - halfSize;
             this.vy *= -restitution;
-            this.vx *= 0.9; // Floor friction
+            this.vx *= 0.9;
         }
     }
 
@@ -75,9 +86,7 @@ function animate() {
         letter.draw();
     });
 
-    // Limit to 50 letters
     if (letters.length > 50) letters.shift();
-    
     requestAnimationFrame(animate);
 }
 
