@@ -1,152 +1,167 @@
-// Declare variables that will hold Matter.js modules and simulation objects.
-let Engine, World, Bodies, Composite; // We'll assign these in setup().
+// Falling Letters Physics Simulation using p5.js and Matter.js
+// (Works in the p5.js Web Editor if you follow the instructions above)
+
+// Matter.js module aliases
+const Engine = Matter.Engine,
+      World  = Matter.World,
+      Bodies = Matter.Bodies,
+      Body   = Matter.Body;
+
+// Global variables
 let engine, world;
-let boundaries = [];   // To store static boundaries (ground, walls, etc.)
-let letters = [];      // To store falling letter bodies.
+let letters = [];        // Array to store falling letter objects
+let myFont;              // Font to be used for the letters (uploaded to the editor)
+let spawnInterval = 1000; // Spawn a new letter every 1000 milliseconds
+let lastSpawnTime = 0;
+
+function preload() {
+  // Load the font you have uploaded.
+  // Make sure the filename matches the file you uploaded.
+  myFont = loadFont("SourceSansPro-Regular.otf");
+}
 
 function setup() {
-  // Use a local alias to reference Matter.js from the global window object.
-  const M = window.Matter;
-  Engine    = M.Engine;
-  World     = M.World;
-  Bodies    = M.Bodies;
-  Composite = M.Composite;
-  
-  // Create a p5.js canvas.
   createCanvas(windowWidth, windowHeight);
   
-  // Create the physics engine and world.
+  // Create the Matter.js engine and world
   engine = Engine.create();
   world = engine.world;
   
-  // Set gravity (with our chosen scale, 1 approximates Earth's gravity).
-  world.gravity.y = 1;
+  /* Set gravity:
+     Assuming 100 pixels ~ 1 meter, Earth's gravity (9.8 m/s²)
+     is scaled to 9.8 * 100 = 980 pixels/s².
+  */
+  world.gravity.y = 9.8;
+  world.gravity.scale = 100;
   
-  // Create static boundaries.
   createBoundaries();
+}
+
+function createBoundaries() {
+  // Remove existing static bodies (while preserving dynamic ones)
+  World.clear(world, false);
   
-  // Spawn a new letter every 800 milliseconds.
-  setInterval(spawnLetter, 800);
+  // Create ground (positioned slightly below the canvas)
+  let ground = Bodies.rectangle(width / 2, height + 50, width, 100, { isStatic: true });
+  // Create left and right walls (placed offscreen to bounce letters back)
+  let leftWall = Bodies.rectangle(-50, height / 2, 100, height, { isStatic: true });
+  let rightWall = Bodies.rectangle(width + 50, height / 2, 100, height, { isStatic: true });
+  
+  World.add(world, [ground, leftWall, rightWall]);
+  
+  // Re-add any existing letter bodies (dynamic bodies)
+  for (let letter of letters) {
+    World.add(world, letter.body);
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  createBoundaries();
 }
 
 function draw() {
-  background(0);
+  background(20); // Dark background
   
-  // Update the physics engine.
-  Engine.update(engine);
+  // Update the Matter.js engine with a fixed time step
+  Engine.update(engine, 1000 / 60);
   
-  // Draw each falling letter.
+  // If the font hasn't loaded yet, display a loading message
+  if (!myFont) {
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(32);
+    text("Loading font...", width / 2, height / 2);
+    return;
+  }
+  
+  // Spawn a new letter at intervals
+  if (millis() - lastSpawnTime > spawnInterval) {
+    spawnLetter();
+    lastSpawnTime = millis();
+  }
+  
+  // Draw each letter
   fill(255);
   noStroke();
-  textAlign(CENTER, CENTER);
-  
-  for (let body of letters) {
-    push();
-    translate(body.position.x, body.position.y);
-    rotate(body.angle);
-    textSize(body.fontSize);
-    text(body.letter, 0, 0);
-    pop();
+  for (let letter of letters) {
+    drawLetter(letter);
   }
 }
 
-// When the window is resized, update the canvas and boundaries.
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  
-  // Remove old boundaries from the world.
-  for (let b of boundaries) {
-    World.remove(world, b);
-  }
-  boundaries = [];
-  createBoundaries();
-}
-
-// Create static boundaries: ground, ceiling, left wall, and right wall.
-function createBoundaries() {
-  const thickness = 50;
-  const ground   = Bodies.rectangle(width / 2, height + thickness / 2, width, thickness, { isStatic: true });
-  const ceiling  = Bodies.rectangle(width / 2, -thickness / 2, width, thickness, { isStatic: true });
-  const leftWall = Bodies.rectangle(-thickness / 2, height / 2, thickness, height, { isStatic: true });
-  const rightWall= Bodies.rectangle(width + thickness / 2, height / 2, thickness, height, { isStatic: true });
-  
-  boundaries.push(ground, ceiling, leftWall, rightWall);
-  World.add(world, boundaries);
-}
-
-// Spawn a new letter body with a custom shape.
 function spawnLetter() {
-  // Choose a random letter (A–Z).
-  const letter = String.fromCharCode(65 + floor(random(26)));
-  // Randomize font size between 30 and 80.
-  const fontSize = 30 + random(50);
-  // Get vertices approximating the letter’s shape.
-  const verts = getLetterVertices(letter, fontSize);
+  // Choose a random letter (upper- or lower-case)
+  let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  let char = possible.charAt(floor(random(possible.length)));
+  // Choose a random size for the letter
+  let letterSize = random(30, 80);
   
-  // Position: random horizontal position (with padding) and just above the view.
-  const x = random(50, width - 50);
-  const y = -fontSize;
+  // Get the outline of the letter as an array of points
+  let pts = myFont.textToPoints(char, 0, 0, letterSize, {
+    sampleFactor: 0.2,
+    simplifyThreshold: 0
+  });
   
-  // Create the physics body from vertices.
-  // The 'true' flag lets Matter.js handle convex decomposition if needed.
-  const letterBody = Bodies.fromVertices(x, y, [verts], {
-    density: 0.001,       // Density similar to water on our scale.
+  // Ensure there are enough points to form a polygon
+  if (pts.length < 3) return;
+  
+  // Convert the points into an array of vertices
+  let vertices = pts.map(pt => ({ x: pt.x, y: pt.y }));
+  // Close the polygon if necessary by checking the first and last points
+  let first = vertices[0],
+      last = vertices[vertices.length - 1];
+  if (dist(first.x, first.y, last.x, last.y) > 1) {
+    vertices.push({ x: first.x, y: first.y });
+  }
+  
+  // Set a random starting x-position (with margins) and a y-position above the canvas
+  let xPos = random(50, width - 50);
+  let yPos = -100;
+  
+  // Create a Matter.js body from the vertices
+  // The final parameter "true" enables concave decomposition if needed.
+  let letterBody = Bodies.fromVertices(xPos, yPos, vertices, {
+    density: 0.001,   // Density similar to water
     friction: 0.1,
-    restitution: 0.3
+    restitution: 0.1,
   }, true);
   
-  // Store letter info for custom rendering.
-  letterBody.letter = letter;
-  letterBody.fontSize = fontSize;
+  if (!letterBody) return; // Skip if body creation fails
   
-  letters.push(letterBody);
+  // Give the body a small random spin
+  Body.setAngularVelocity(letterBody, random(-0.05, 0.05));
+  
+  // Store the letter data for later drawing and physics simulation
+  letters.push({
+    char: char,
+    body: letterBody,
+    originalVertices: vertices,
+    size: letterSize
+  });
+  
+  // Add the new letter body to the physics world
   World.add(world, letterBody);
 }
 
-// Return an array of vertices approximating the shape of the letter.
-// For letters without custom shapes, a simple rectangle is returned.
-function getLetterVertices(letter, fontSize) {
-  const w = fontSize * 0.6;
-  const h = fontSize;
+function drawLetter(letter) {
+  let body = letter.body;
+  push();
+  // Translate and rotate according to the physics simulation
+  translate(body.position.x, body.position.y);
+  rotate(body.angle);
+  noStroke();
+  fill(255);
   
-  // Default: simple rectangle.
-  let verts = [
-    { x: -w / 2, y: -h / 2 },
-    { x:  w / 2, y: -h / 2 },
-    { x:  w / 2, y:  h / 2 },
-    { x: -w / 2, y:  h / 2 }
-  ];
-  
-  // Custom shape for letter A: pointed top with a crossbar.
-  if (letter.toUpperCase() === 'A') {
-    verts = [
-      { x: -w / 2, y: h / 2 },
-      { x: 0,      y: -h / 2 },
-      { x: w / 2,  y: h / 2 },
-      { x: w * 0.25, y: 0 },
-      { x: -w * 0.25, y: 0 }
-    ];
-  }
-  // Custom shape for letter O: approximate with an octagon.
-  else if (letter.toUpperCase() === 'O') {
-    const r = min(w, h) / 2;
-    verts = [];
-    const sides = 8;
-    for (let i = 0; i < sides; i++) {
-      const angle = TWO_PI / sides * i;
-      verts.push({ x: r * cos(angle), y: r * sin(angle) });
+  // If the body is compound (from concave decomposition),
+  // use its parts (skipping the first element if necessary)
+  let parts = (body.parts.length === 1) ? [body] : body.parts.slice(1);
+  for (let part of parts) {
+    beginShape();
+    for (let v of part.vertices) {
+      // Since we already translated, subtract the body's position
+      vertex(v.x - body.position.x, v.y - body.position.y);
     }
+    endShape(CLOSE);
   }
-  // Custom shape for letter M: two pillars with a central V.
-  else if (letter.toUpperCase() === 'M') {
-    verts = [
-      { x: -w / 2, y: h / 2 },
-      { x: -w / 2, y: -h / 2 },
-      { x: 0,      y: 0 },
-      { x: w / 2,  y: -h / 2 },
-      { x: w / 2,  y: h / 2 }
-    ];
-  }
-  
-  return verts;
+  pop();
 }
