@@ -1,167 +1,161 @@
-// Falling Letters Physics Simulation using p5.js and Matter.js
-// (Works in the p5.js Web Editor if you follow the instructions above)
+/* global Matter opentype */
 
-// Matter.js module aliases
-const Engine = Matter.Engine,
-      World  = Matter.World,
-      Bodies = Matter.Bodies,
-      Body   = Matter.Body;
+// Encapsulate our code in an IIFE to keep the global namespace clean.
+(() => {
+  // Destructure Matter.js modules for convenience.
+  const {
+    Engine,
+    Render,
+    Runner,
+    World,
+    Bodies,
+    Body,
+    Composite,
+    Vertices,
+    Events,
+    Svg,
+  } = Matter;
 
-// Global variables
-let engine, world;
-let letters = [];        // Array to store falling letter objects
-let myFont;              // Font to be used for the letters (uploaded to the editor)
-let spawnInterval = 1000; // Spawn a new letter every 1000 milliseconds
-let lastSpawnTime = 0;
+  // ── SET UP THE PHYSICS ENGINE ──────────────────────────────
+  const engine = Engine.create();
+  const world  = engine.world;
+  // Set gravity to Earth’s 9.8 m/s² converted to pixels (1 m = 50 px).
+  const meterToPixel = 50;
+  engine.world.gravity.y = 9.8 * meterToPixel;
 
-function preload() {
-  // Load the font you have uploaded.
-  // Make sure the filename matches the file you uploaded.
-  myFont = loadFont("SourceSansPro-Regular.otf");
-}
-
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  
-  // Create the Matter.js engine and world
-  engine = Engine.create();
-  world = engine.world;
-  
-  /* Set gravity:
-     Assuming 100 pixels ~ 1 meter, Earth's gravity (9.8 m/s²)
-     is scaled to 9.8 * 100 = 980 pixels/s².
-  */
-  world.gravity.y = 9.8;
-  world.gravity.scale = 100;
-  
-  createBoundaries();
-}
-
-function createBoundaries() {
-  // Remove existing static bodies (while preserving dynamic ones)
-  World.clear(world, false);
-  
-  // Create ground (positioned slightly below the canvas)
-  let ground = Bodies.rectangle(width / 2, height + 50, width, 100, { isStatic: true });
-  // Create left and right walls (placed offscreen to bounce letters back)
-  let leftWall = Bodies.rectangle(-50, height / 2, 100, height, { isStatic: true });
-  let rightWall = Bodies.rectangle(width + 50, height / 2, 100, height, { isStatic: true });
-  
-  World.add(world, [ground, leftWall, rightWall]);
-  
-  // Re-add any existing letter bodies (dynamic bodies)
-  for (let letter of letters) {
-    World.add(world, letter.body);
-  }
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  createBoundaries();
-}
-
-function draw() {
-  background(20); // Dark background
-  
-  // Update the Matter.js engine with a fixed time step
-  Engine.update(engine, 1000 / 60);
-  
-  // If the font hasn't loaded yet, display a loading message
-  if (!myFont) {
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(32);
-    text("Loading font...", width / 2, height / 2);
-    return;
-  }
-  
-  // Spawn a new letter at intervals
-  if (millis() - lastSpawnTime > spawnInterval) {
-    spawnLetter();
-    lastSpawnTime = millis();
-  }
-  
-  // Draw each letter
-  fill(255);
-  noStroke();
-  for (let letter of letters) {
-    drawLetter(letter);
-  }
-}
-
-function spawnLetter() {
-  // Choose a random letter (upper- or lower-case)
-  let possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  let char = possible.charAt(floor(random(possible.length)));
-  // Choose a random size for the letter
-  let letterSize = random(30, 80);
-  
-  // Get the outline of the letter as an array of points
-  let pts = myFont.textToPoints(char, 0, 0, letterSize, {
-    sampleFactor: 0.2,
-    simplifyThreshold: 0
-  });
-  
-  // Ensure there are enough points to form a polygon
-  if (pts.length < 3) return;
-  
-  // Convert the points into an array of vertices
-  let vertices = pts.map(pt => ({ x: pt.x, y: pt.y }));
-  // Close the polygon if necessary by checking the first and last points
-  let first = vertices[0],
-      last = vertices[vertices.length - 1];
-  if (dist(first.x, first.y, last.x, last.y) > 1) {
-    vertices.push({ x: first.x, y: first.y });
-  }
-  
-  // Set a random starting x-position (with margins) and a y-position above the canvas
-  let xPos = random(50, width - 50);
-  let yPos = -100;
-  
-  // Create a Matter.js body from the vertices
-  // The final parameter "true" enables concave decomposition if needed.
-  let letterBody = Bodies.fromVertices(xPos, yPos, vertices, {
-    density: 0.001,   // Density similar to water
-    friction: 0.1,
-    restitution: 0.1,
-  }, true);
-  
-  if (!letterBody) return; // Skip if body creation fails
-  
-  // Give the body a small random spin
-  Body.setAngularVelocity(letterBody, random(-0.05, 0.05));
-  
-  // Store the letter data for later drawing and physics simulation
-  letters.push({
-    char: char,
-    body: letterBody,
-    originalVertices: vertices,
-    size: letterSize
-  });
-  
-  // Add the new letter body to the physics world
-  World.add(world, letterBody);
-}
-
-function drawLetter(letter) {
-  let body = letter.body;
-  push();
-  // Translate and rotate according to the physics simulation
-  translate(body.position.x, body.position.y);
-  rotate(body.angle);
-  noStroke();
-  fill(255);
-  
-  // If the body is compound (from concave decomposition),
-  // use its parts (skipping the first element if necessary)
-  let parts = (body.parts.length === 1) ? [body] : body.parts.slice(1);
-  for (let part of parts) {
-    beginShape();
-    for (let v of part.vertices) {
-      // Since we already translated, subtract the body's position
-      vertex(v.x - body.position.x, v.y - body.position.y);
+  // ── CREATE THE RENDERER ───────────────────────────────────────
+  let canvasWidth  = window.innerWidth;
+  let canvasHeight = window.innerHeight;
+  const render = Render.create({
+    element: document.body,
+    engine: engine,
+    options: {
+      width: canvasWidth,
+      height: canvasHeight,
+      background: '#000',
+      wireframes: false,
+      pixelRatio: window.devicePixelRatio
     }
-    endShape(CLOSE);
-  }
-  pop();
-}
+  });
+  Render.run(render);
+
+  const runner = Runner.create();
+  Runner.run(runner, engine);
+
+  // ── CREATE STATIC BOUNDARIES ────────────────────────────────
+  const thickness = 100;
+  const ground    = Bodies.rectangle(canvasWidth / 2, canvasHeight + thickness / 2, canvasWidth, thickness, { isStatic: true });
+  const ceiling   = Bodies.rectangle(canvasWidth / 2, -thickness / 2, canvasWidth, thickness, { isStatic: true });
+  const leftWall  = Bodies.rectangle(-thickness / 2, canvasHeight / 2, thickness, canvasHeight, { isStatic: true });
+  const rightWall = Bodies.rectangle(canvasWidth + thickness / 2, canvasHeight / 2, thickness, canvasHeight, { isStatic: true });
+  World.add(world, [ground, ceiling, leftWall, rightWall]);
+
+  // Update boundaries when the window is resized.
+  const updateBoundaries = () => {
+    canvasWidth  = window.innerWidth;
+    canvasHeight = window.innerHeight;
+    render.options.width  = canvasWidth;
+    render.options.height = canvasHeight;
+    render.canvas.width   = canvasWidth;
+    render.canvas.height  = canvasHeight;
+
+    Body.setPosition(ground,  { x: canvasWidth / 2, y: canvasHeight + thickness / 2 });
+    Body.setPosition(ceiling, { x: canvasWidth / 2, y: -thickness / 2 });
+    Body.setPosition(leftWall, { x: -thickness / 2, y: canvasHeight / 2 });
+    Body.setPosition(rightWall, { x: canvasWidth + thickness / 2, y: canvasHeight / 2 });
+
+    Render.lookAt(render, {
+      min: { x: 0, y: 0 },
+      max: { x: canvasWidth, y: canvasHeight }
+    });
+  };
+  window.addEventListener('resize', updateBoundaries);
+
+  // ── LOAD A FONT WITH OpenType.js ─────────────────────────────
+  let font;
+  opentype.load('https://raw.githubusercontent.com/opentypejs/opentype.js/master/test/fonts/Roboto-Black.ttf', (err, loadedFont) => {
+    if (err) {
+      console.error('Font could not be loaded:', err);
+    } else {
+      font = loadedFont;
+      // Start spawning letters every second once the font is ready.
+      setInterval(spawnLetter, 1000);
+    }
+  });
+
+  // ── SPAWN FALLING LETTERS ─────────────────────────────────────
+  const spawnLetter = () => {
+    if (!font) return;
+
+    // Choose a random letter from A–Z.
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const letter = letters.charAt(Math.floor(Math.random() * letters.length));
+    // Random font size between 30 and 80 pixels.
+    const fontSize = Math.random() * (80 - 30) + 30;
+
+    // Get the SVG path for the letter.
+    const path = font.getPath(letter, 0, 0, fontSize);
+    const svgPathData = path.toPathData(2);
+
+    // Create a temporary SVG <path> element for conversion.
+    const tempPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    tempPath.setAttribute("d", svgPathData);
+
+    // Convert the SVG path into vertices (with a sampling precision of 5).
+    const vertices = Svg.pathToVertices(tempPath, 5);
+    if (!vertices || vertices.length === 0) return;
+
+    // Re-center the vertices so that (0,0) corresponds to the shape’s centroid.
+    const centroid = Vertices.centre(vertices);
+    const translatedVertices = vertices.map(v => ({ x: v.x - centroid.x, y: v.y - centroid.y }));
+
+    // Spawn the letter at a random horizontal position just above the screen.
+    const x = Math.random() * canvasWidth;
+    const y = -50;
+
+    // Create the physics body from the letter’s vertices.
+    const letterBody = Bodies.fromVertices(x, y, translatedVertices, {
+      restitution: 0.1,
+      friction: 0.1,
+      frictionAir: 0.01,
+      density: 0.001,
+      render: { visible: false } // We draw the letter shape manually.
+    }, true);
+
+    if (letterBody) {
+      // Store extra data for custom drawing.
+      letterBody.letter     = letter;
+      letterBody.letterPath = svgPathData;
+      letterBody.centroid   = centroid;
+      World.add(world, letterBody);
+    }
+  };
+
+  // ── CUSTOM RENDERING OF LETTER SHAPES ─────────────────────────
+  // Instead of using Matter’s default rendering, we use the afterRender event
+  // to draw the actual letter shapes (using their SVG paths) with the Canvas 2D API.
+  Events.on(render, 'afterRender', () => {
+    const context = render.context;
+    const bodies  = Composite.allBodies(world);
+
+    context.save();
+    context.fillStyle = "#fff";
+
+    bodies.forEach(body => {
+      if (body.letter && body.letterPath && body.centroid) {
+        context.save();
+        // Move into the body’s coordinate system.
+        context.translate(body.position.x, body.position.y);
+        context.rotate(body.angle);
+        // Shift so that the drawing’s (0,0) is at the letter’s centroid.
+        context.translate(-body.centroid.x, -body.centroid.y);
+        // Create a Path2D from the stored SVG path and fill it.
+        const path2d = new Path2D(body.letterPath);
+        context.fill(path2d);
+        context.restore();
+      }
+    });
+
+    context.restore();
+  });
+})();
