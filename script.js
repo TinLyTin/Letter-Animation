@@ -7,7 +7,7 @@ const gravity = 0.8;
 const restitution = 0.7;
 const airResistance = 0.99;
 const wallBounce = 0.8;
-const nameParts = ['Li', 'Ting']; // Li Ting characters
+const nameParts = ['Ting', 'Li']; // Your name parts
 
 function resize() {
     canvas.width = window.innerWidth;
@@ -16,18 +16,18 @@ function resize() {
 
 class Letter {
     constructor() {
-        // 20% chance for Chinese characters, 80% for English
-        if (Math.random() < 0.2) {
-            this.char = chineseChars[Math.floor(Math.random() * chineseChars.length)];
+        // 30% chance for name parts, 70% for random letters
+        if (Math.random() < 0.3) {
+            this.char = nameParts[Math.floor(Math.random() * nameParts.length)];
         } else {
             this.char = String.fromCharCode(65 + Math.random() * 26);
         }
         
         // Size properties
-        this.startSize = 30; // Initial small size
+        this.startSize = 10;
         this.size = this.startSize;
-        this.maxSize = Math.random() * 50 + 30; // Random maximum size
-        this.growthRate = 0.5; // Size increase per frame
+        this.maxSize = Math.random() * 30 + 20;
+        this.growthRate = 0.5;
 
         this.x = Math.random() * (canvas.width - this.maxSize) + this.maxSize/2;
         this.y = -this.maxSize;
