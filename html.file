@@ -2,22 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Letter Dropping Physics</title>
+  <title>Falling Letters Physics</title>
   <style>
     /* Fullscreen dark background with no scrollbars */
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #000;
+      background-color: #000;
     }
-    canvas { display: block; }
   </style>
 </head>
 <body>
-  <!-- Include Matter.js from CDN -->
+  <!-- Load p5.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.1/p5.min.js"></script>
+  <!-- Load Matter.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-  <!-- Include our custom script -->
-  <script src="script.js"></script>
+  <!-- Load our sketch -->
+  <script src="sketch.js"></script>
 </body>
 </html>
