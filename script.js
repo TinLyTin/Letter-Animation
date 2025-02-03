@@ -7,7 +7,7 @@ const gravity = 0.8;
 const restitution = 0.7;
 const airResistance = 0.99;
 const wallBounce = 0.8;
-const chineseChars = ['李', '婷']; // Li Ting characters
+const chineseChars = ['Li', 'Ting']; // Li Ting characters
 
 function resize() {
     canvas.width = window.innerWidth;
