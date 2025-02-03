@@ -24,7 +24,7 @@ class Letter {
         }
         
         // Size properties
-        this.startSize = 10; // Initial small size
+        this.startSize = 20; // Initial small size
         this.size = this.startSize;
         this.maxSize = Math.random() * 30 + 20; // Random maximum size
         this.growthRate = 0.5; // Size increase per frame
